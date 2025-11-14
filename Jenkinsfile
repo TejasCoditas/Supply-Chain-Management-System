@@ -52,17 +52,17 @@ pipeline {
 
                         echo "Login to ECR"
                         aws ecr get-login-password --region ${AWS_REGION} \
-                        | docker login --username AWS --password-stdin \$ECR_REPO/supply_change_management_system_java
+                        | docker login --username AWS --password-stdin \$ECR_REPO/supply_chain_management_system_java
 
                         echo "Building Image: ${IMAGE_TAG}"
-                        docker build -t \$ECR_REPO/supply_change_management_system_java:${IMAGE_TAG} .
+                        docker build -t \$ECR_REPO/supply_chain_management_system_java:${IMAGE_TAG} .
 
                         echo "Pushing image"
-                        docker push \$ECR_REPO/supply_change_management_system_java:${IMAGE_TAG}
+                        docker push \$ECR_REPO/supply_chain_management_system_java:${IMAGE_TAG}
 
                         echo "Tag & push latest"
-                        docker tag \$ECR_REPO/supply_change_management_system_java:${IMAGE_TAG} \$ECR_REPO/supply_change_management_system_java:latest
-                        docker push \$ECR_REPO/supply_change_management_system_java:latest
+                        docker tag \$ECR_REPO/supply_chain_management_system_java:${IMAGE_TAG} \$ECR_REPO/supply_chain_management_system_java:latest
+                        docker push \$ECR_REPO/supply_chain_management_system_java:latest
                     """
                 }
             }
