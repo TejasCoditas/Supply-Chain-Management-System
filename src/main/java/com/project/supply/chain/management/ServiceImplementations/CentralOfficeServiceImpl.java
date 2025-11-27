@@ -9,7 +9,10 @@ import com.project.supply.chain.management.dto.*;
 import com.project.supply.chain.management.entity.CentralOffice;
 import com.project.supply.chain.management.entity.User;
 import com.project.supply.chain.management.entity.UserCentralOfficeMapping;
+import com.project.supply.chain.management.exceptions.ResourceNotFoundException;
+import com.project.supply.chain.management.exceptions.UnauthorizedAccessException;
 import jakarta.transaction.Transactional;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -17,15 +20,16 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
+@AllArgsConstructor
 public class CentralOfficeServiceImpl implements CentralOfficeService {
-    @Autowired
-   CentralOfficeRepository centralOfficeRepository;
-    @Autowired
-     UserRepository userRepository;
-    @Autowired
-    UserCentralOfficeRepository mappingRepository;
-    @Autowired
-     PasswordEncoder passwordEncoder;
+
+   private final CentralOfficeRepository centralOfficeRepository;
+
+   private final   UserRepository userRepository;
+
+   private final UserCentralOfficeRepository mappingRepository;
+
+   private final  PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional
@@ -40,24 +44,22 @@ public class CentralOfficeServiceImpl implements CentralOfficeService {
 
         CentralOffice office = new CentralOffice();
         office.setLocation(dto.getLocation() != null ? dto.getLocation() : "Headquarters");
-        centralOfficeRepository.save(office); // This persists the office in the DB
+        centralOfficeRepository.save(office);
 
-        // Step 4: Handle user (central office officer)
         User user = userRepository.findByEmail(dto.getCentralOfficeHeadEmail());
 
         if (user == null) {
-            // Create new CENTRAL_OFFICE user
+
             user = new User();
             user.setEmail(dto.getCentralOfficeHeadEmail());
             user.setUsername(dto.getCentralOfficeHeadName() != null ? dto.getCentralOfficeHeadName() : dto.getCentralOfficeHeadEmail());
             user.setPassword(passwordEncoder.encode(dto.getPassword() != null ? dto.getPassword() : "default123"));
             user.setRole(Role.CENTRAL_OFFICE);
-            userRepository.save(user);  // This persists the new user in the DB
+            userRepository.save(user);
         } else if (user.getRole() != Role.CENTRAL_OFFICE) {
-            return new ApiResponseDto<>(false, "User exists but is not a Central Office user", null);
+           throw new UnauthorizedAccessException(" User exists but is not a Central Office user;");
         }
 
-        // Step 5: Map this officer to the single central office
         UserCentralOfficeMapping mapping = new UserCentralOfficeMapping();
         mapping.setOffice(office);
         mapping.setUser(user);
@@ -69,22 +71,22 @@ public class CentralOfficeServiceImpl implements CentralOfficeService {
     @Transactional
     @Override
     public ApiResponseDto<Void> addCentralOfficerToOffice(AddCentralOfficerDto dto) {
-        // Step 1: Check if the Central Office exists
+        //  Check if the Central Office exists
         CentralOffice office = centralOfficeRepository.findById(1L)
-                .orElseThrow(() -> new RuntimeException("Central Office not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Central Office not found"));
 
-        // Step 2: Check if the User (Central Officer) exists and is a Central Officer
+        //  Check if the User (Central Officer) exists and is a Central Officer
         User officer = userRepository.findByEmail(dto.getCentralOfficerEmail());
         if (officer != null) {
             // If the user exists, check if they are already a Central Officer
             if (officer.getRole() == Role.CENTRAL_OFFICE) {
-                return new ApiResponseDto<>(false, "User is already a Central Officer", null);
+                throw new UnauthorizedAccessException("User is already a Central Officer");
             }
             // If the user exists but is not a Central Officer, return an error
-            return new ApiResponseDto<>(false, "User already exists but is not a Central Officer", null);
+            throw  new UnauthorizedAccessException( "User already exists but is not a Central Officer");
         }
 
-        // Step 3: If the user does not exist, create a new Central Officer
+        //  If the user does not exist, create a new Central Officer
         officer = new User();
         officer.setEmail(dto.getCentralOfficerEmail()); officer.setUsername(dto.getCentralOfficeHeadName() != null ? dto.getCentralOfficeHeadName() : dto.getCentralOfficerEmail());
         officer.setPassword(passwordEncoder.encode("default123"));
@@ -92,13 +94,12 @@ public class CentralOfficeServiceImpl implements CentralOfficeService {
         officer.setPhone(dto.getPhone());
         userRepository.save(officer);
 
-        // Step 4: Map the newly created officer to the Central Office
+        //  Map the newly created officer to the Central Office
         UserCentralOfficeMapping mapping = new UserCentralOfficeMapping();
         mapping.setOffice(office);
         mapping.setUser(officer);
         mappingRepository.save(mapping);
 
-        // Return success response
         return new ApiResponseDto<>(true, "Central Officer added to Central Office successfully", null);
     }
 

@@ -5,8 +5,14 @@ import com.project.supply.chain.management.constants.Account_Status;
 import com.project.supply.chain.management.constants.Role;
 import com.project.supply.chain.management.dto.*;
 import com.project.supply.chain.management.entity.*;
+import com.project.supply.chain.management.exceptions.InvalidCredentialsException;
+import com.project.supply.chain.management.exceptions.ResourceNotFoundException;
+import com.project.supply.chain.management.exceptions.UnauthorizedAccessException;
+import com.project.supply.chain.management.exceptions.UserNotFoundException;
 import com.project.supply.chain.management.specifications.FactorySpecifications;
+import com.project.supply.chain.management.util.ApplicationUtils;
 import jakarta.transaction.Transactional;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,58 +25,54 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
+@AllArgsConstructor
 public class FactoryServiceImpl implements FactoryService {
-    @Autowired
-    CentralOfficeRepository centralOfficeRepository;
-    @Autowired
-    FactoryRepository factoryRepository;
-    @Autowired
-    UserRepository userRepository;
-@Autowired
-  EmailService emailService;
-    @Autowired
-    UserFactoryMappingRepository userFactoryMappingRepository;
 
-    @Autowired
-    FactoryProductionRepository factoryProductionRepository;
-    @Autowired
-    ToolStockRepository toolStockRepository;
+    private final CentralOfficeRepository centralOfficeRepository;
+
+    private final   FactoryRepository factoryRepository;
+
+    private final UserRepository userRepository;
+
+    private final  EmailService emailService;
+
+    private final  UserFactoryMappingRepository userFactoryMappingRepository;
+
+    private final ApplicationUtils appUtils;
+
+    private final  FactoryProductionRepository factoryProductionRepository;
+
+    private final ToolStockRepository toolStockRepository;
+
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
     @Transactional
-
     public ApiResponseDto<Void> createFactory(FactoryDto dto) {
 
-        // Step 1️⃣: Validate plant head email
+        //  Validate plant head email
         if (dto.getPlantHeadEmail() == null || dto.getPlantHeadEmail().isBlank()) {
-            return new ApiResponseDto<>(false, "Plant head email is required", null);
+            throw  new InvalidCredentialsException("Plant head email is required");
         }
 
-        // Step 2️⃣: Check if user exists
+        // Check if user exists
         User existingUser = userRepository.findByEmail(dto.getPlantHeadEmail());
         if (existingUser == null) {
-            return new ApiResponseDto<>(false,
-                    "No user found with this email. Please create a Plant Head first.",
-                    null);
+            throw  new UserNotFoundException("No user found with this email. Please create a Plant Head first");
         }
 
-        // Step 3️⃣: Verify user role is PLANT_HEAD
+        // Verify user is PLANT_HEAD
         if (existingUser.getRole() != Role.PLANT_HEAD) {
-            return new ApiResponseDto<>(false,
-                    "User exists but is not a Plant Head. Please assign correct role or create new Plant Head.",
-                    null);
+            throw  new UnauthorizedAccessException("User exists but is not a Plant Head. Please assign correct role or create new Plant Head.");
         }
 
-        // Step 4️⃣: Check if this Plant Head is already mapped to another factory
+        //Check if this Plant Head is already mapped to another factory
         boolean isAlreadyAssigned = userFactoryMappingRepository.existsByUser(existingUser);
         if (isAlreadyAssigned) {
-            return new ApiResponseDto<>(false,
-                    "This Plant Head is already assigned to another factory.",
-                    null);
+            throw  new UnauthorizedAccessException("This Plant Head is already assigned to another factory.");
         }
 
-        // Step 5️⃣: Create factory entity
+        //Create factory entity
         Factory factory = new Factory();
         factory.setName(dto.getName());
         factory.setCity(dto.getCity());
@@ -79,7 +81,7 @@ public class FactoryServiceImpl implements FactoryService {
         factory.setIsActive(Account_Status.ACTIVE);
         factoryRepository.save(factory);
 
-        // Step 6️⃣: Create factory-user mapping
+        //Create factory-user mapping
         UserFactoryMapping mapping = new UserFactoryMapping();
         mapping.setUser(existingUser);
         mapping.setFactory(factory);
@@ -90,14 +92,14 @@ public class FactoryServiceImpl implements FactoryService {
 
 
     @Override
-@Transactional
-public ApiResponseDto<Void> createEmployeeAsPlantHead(AddEmployeeDto dto) {
+  @Transactional
+  public ApiResponseDto<Void> createEmployeeAsPlantHead(AddEmployeeDto dto) {
 
     if (userRepository.findByEmail(dto.getEmail()) != null) {
-        return new ApiResponseDto<>(false, "User with this email already exists", null);
+        throw  new InvalidCredentialsException("User with this email already exists");
     }
 
-    // Step 2: Create Plant Head
+    // Create Plant Head
     String defaultPassword = "12345678";
     User user = new User();
     user.setEmail(dto.getEmail());
@@ -108,11 +110,11 @@ public ApiResponseDto<Void> createEmployeeAsPlantHead(AddEmployeeDto dto) {
     user.setIsActive(Account_Status.ACTIVE);
     userRepository.save(user);
 
-    // Step 3: Send Email Notification
+    //  Send Email Notification
     String loginUrl = "http://localhost:8080/login";
 
     String subject = "Welcome! You are appointed as Plant Head";
-    //text block usage
+    //text block used
     String body = String.format("""
             Hello %s,
             
@@ -148,14 +150,14 @@ public ApiResponseDto<Void> createEmployeeAsPlantHead(AddEmployeeDto dto) {
 
     @Override
     public ApiResponseDto<Page<FactoryDto>> getAllFactories(String search, Pageable pageable) {
-        // Step 1: Fetch filtered and paginated factories with ACTIVE status
+
         Page<Factory> factoryPage = factoryRepository.findAll(
                 FactorySpecifications.searchFactories(search)
                         .and(FactorySpecifications.isActiveFilter(Account_Status.ACTIVE)),  // Added filter for ACTIVE status
                 pageable
         );
 
-        // Step 2: Convert Factory -> FactoryDto
+        //  Convert Factory -> FactoryDto
         Page<FactoryDto> dtoPage = factoryPage.map(factory -> {
             FactoryDto dto = new FactoryDto();
 dto.setFactoryId(factory.getId());
@@ -166,7 +168,7 @@ dto.setFactoryId(factory.getId());
             return dto;
         });
 
-        // Step 3: Return standardized ApiResponse
+        //Return standardized ApiResponse
         return new ApiResponseDto<>(true, "Factories fetched successfully", dtoPage);
     }
 
@@ -176,10 +178,10 @@ dto.setFactoryId(factory.getId());
         // Fetch the factory to be updated
 
         Factory factory = factoryRepository.findById(factoryId)
-                .orElseThrow(() -> new RuntimeException("Factory not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Factory not found"));
 if(factory.getIsActive()!= Account_Status.ACTIVE)
 {
-    throw new RuntimeException(" Factory Not found");
+    throw new ResourceNotFoundException(" Factory Not found");
 }
         // Update factory details (except for status)
         factory.setName(updateFactoryDto.getName() != null ? updateFactoryDto.getName() : factory.getName());
@@ -195,28 +197,26 @@ if(factory.getIsActive()!= Account_Status.ACTIVE)
                 return new ApiResponseDto<>(false, "Provided plant head is either invalid or not a PLANT_HEAD", null);
             }
         }
-
         // Save the updated factory
         factoryRepository.save(factory);
 
         return new ApiResponseDto<>(true, "Factory updated successfully", null);
-
 }
 
     @Override
     @Transactional
     public ApiResponseDto<Void> deleteFactory(Long factoryId) {
-        // Step 1: Check if the factory exists
+        //  Check if the factory exists
         Optional<Factory> factoryOpt = factoryRepository.findById(factoryId);
 
         if (!factoryOpt.isPresent()) {
-            return new ApiResponseDto<>(false, "Factory not found", null);
+            throw  new ResourceNotFoundException( "Factory not found");
         }
 
-        // Step 2: Update the factory's isActive status and updatedAt field
+        // Update the factory's isActive status and updatedAt field
         Factory factory = factoryOpt.get();
         factory.setIsActive(Account_Status.IN_ACTIVE);
-        factory.setUpdatedAt(LocalDateTime.now());  // Update the timestamp
+        factory.setUpdatedAt(LocalDateTime.now());
         factoryRepository.save(factory);
 
         return new ApiResponseDto<>(true, "Factory status updated to IN_ACTIVE", null);
@@ -225,50 +225,42 @@ if(factory.getIsActive()!= Account_Status.ACTIVE)
     public ApiResponseDto<List<FactoryProductionSummaryDto>> getFactoryProductionSummary() {
         List<FactoryProductionSummaryDto> summaries = factoryProductionRepository.getFactoryProductionSummary();
 
-        return new ApiResponseDto<>(
-                true,
-                "Production summary fetched successfully",
-                summaries
-        );
+        return new ApiResponseDto<>(true, "Production summary fetched successfully", summaries);
     }
 
     @Override
-    public ApiResponseDto<FactoryDetailsDto> getFactoryDetails(Long factoryId) {
-        // ✅ Extract logged-in user from JWT
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByEmail(email);
+    public ApiResponseDto<FactoryDetailsDto> getFactoryDetails(Long factoryId)
+    {
+        User user = appUtils.getUser(appUtils.getLoggedInUserEmail());
 
         if (user == null)
-            throw new RuntimeException("User not found");
+            throw new UserNotFoundException("User not found");
 
         Factory factory;
-
-        // ✅ Owner can specify factory ID manually
         if (user.getRole() == Role.OWNER) {
             if (factoryId == null)
-                throw new RuntimeException("Factory ID must be provided by the Owner");
+                throw new ResourceNotFoundException("Factory not found");
 
             factory = factoryRepository.findById(factoryId)
-                    .orElseThrow(() -> new RuntimeException("Factory not found"));
+                    .orElseThrow(() -> new ResourceNotFoundException("Factory not found"));
         }
 
-        // ✅ Plant Head automatically linked to their assigned factory
+        // Plant Head automatically linked to their assigned factory
         else if (user.getRole() == Role.PLANT_HEAD) {
             UserFactoryMapping mapping = userFactoryMappingRepository.findByUser(user)
-                    .orElseThrow(() -> new RuntimeException("Plant Head is not assigned to any factory"));
+                    .orElseThrow(() -> new UnauthorizedAccessException("Plant Head is not assigned to any factory"));
 
             factory = mapping.getFactory();
         }
 
-        // ❌ Other roles not allowed
         else {
-            throw new RuntimeException("You are not authorized to view factory details");
+            throw new UnauthorizedAccessException("You are not authorized to view factory details");
         }
 
-        // 🧑‍🏭 Total Employees
+        // Total Employees
         Long totalEmployees = userFactoryMappingRepository.countByFactory(factory);
 
-        // 🛠 Tool Details
+        // Tool Details
         List<ToolStock> toolStocks = toolStockRepository.findByFactory(factory);
         List<ToolSummaryDto> toolSummaries = toolStocks.stream()
                 .map(ts -> new ToolSummaryDto(
@@ -278,7 +270,7 @@ if(factory.getIsActive()!= Account_Status.ACTIVE)
                         ts.getIssuedQuantity()))
                 .toList();
 
-        // 🏭 Product Details
+        // Product Details
         List<FactoryProduction> productions = factoryProductionRepository.findByFactory(factory);
         List<ProductSummaryDto> productSummaries = productions.stream()
                 .map(p -> new ProductSummaryDto(
@@ -286,7 +278,6 @@ if(factory.getIsActive()!= Account_Status.ACTIVE)
                         p.getProducedQty()))
                 .toList();
 
-        // 🧾 Final DTO
         FactoryDetailsDto dto = new FactoryDetailsDto(
 factory.getId(),
                 factory.getName(),

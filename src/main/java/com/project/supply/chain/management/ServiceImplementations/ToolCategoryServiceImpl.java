@@ -9,23 +9,27 @@ import com.project.supply.chain.management.dto.ApiResponseDto;
 import com.project.supply.chain.management.dto.ToolCategoryDto;
 import com.project.supply.chain.management.entity.Tool;
 import com.project.supply.chain.management.entity.ToolCategory;
+import com.project.supply.chain.management.exceptions.ResourceAlreadyExistsException;
+import com.project.supply.chain.management.exceptions.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
+@AllArgsConstructor
 public class ToolCategoryServiceImpl implements ToolCategoryService {
-    @Autowired
-    ToolCategoryRepository toolCategoryRepository;
-    @Autowired
-    ToolsRepository toolsRepository;
+
+    private final ToolCategoryRepository toolCategoryRepository;
+
+    private final ToolsRepository toolsRepository;
     @Override
     public ApiResponseDto<ToolCategoryDto> addToolCategory(AddToolCategoryDto dto) {
-        // Check for duplicate
+
         if (toolCategoryRepository.existsByNameIgnoreCase(dto.getName())) {
-            return new ApiResponseDto<>(false, "Tool category with this name already exists", null);
+            throw  new ResourceAlreadyExistsException( "Tool category with this name already exists");
         }
 
         ToolCategory category = new ToolCategory();
@@ -48,7 +52,7 @@ public class ToolCategoryServiceImpl implements ToolCategoryService {
         List<ToolCategory> categories = toolCategoryRepository.findAll();
 
         if (categories.isEmpty()) {
-            return new ApiResponseDto<>(false, "No tool categories found", null);
+            throw  new ResourceNotFoundException( "No tool categories found");
         }
 
         List<ToolCategoryDto> dtoList = categories.stream()
@@ -63,24 +67,21 @@ public class ToolCategoryServiceImpl implements ToolCategoryService {
     }
     @Override
     public ApiResponseDto<ToolCategoryDto> updateToolCategory(Long id, AddToolCategoryDto dto) {
-        // ✅ 1. Fetch existing category
-        ToolCategory category = toolCategoryRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool category not found"));
 
-        // ✅ 2. Check duplicate name if changing
+        ToolCategory category = toolCategoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Tool category not found"));
+
         if (dto.getName() != null &&
                 !dto.getName().equalsIgnoreCase(category.getName()) &&
                 toolCategoryRepository.existsByNameIgnoreCase(dto.getName())) {
-            return new ApiResponseDto<>(false, "Tool category with this name already exists", null);
+            throw  new ResourceAlreadyExistsException( "Tool category with this name already exists");
         }
 
-        // ✅ 3. Update fields
         if (dto.getName() != null) category.setName(dto.getName());
         if (dto.getDescription() != null) category.setDescription(dto.getDescription());
 
         ToolCategory updated = toolCategoryRepository.save(category);
 
-        // ✅ 4. Build response
         ToolCategoryDto response = new ToolCategoryDto(
                 updated.getId(),
                 updated.getName(),
@@ -91,27 +92,17 @@ public class ToolCategoryServiceImpl implements ToolCategoryService {
     }
 
 
-    //delte tool category and the tools under it
     @Override
     @Transactional
     public ApiResponseDto<Void> deleteToolCategory(Long id) {
-        // 1️⃣ Find tool category
-        ToolCategory category = toolCategoryRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool category not found"));
 
-        // 2️⃣ Get all tools under this category
+        ToolCategory category = toolCategoryRepository.findById(id).orElseThrow(() -> new RuntimeException("Tool category not found"));
         List<Tool> tools = toolsRepository.findByCategory(category);
-
-        // 3️⃣ Mark each tool as INACTIVE (soft delete)
         for (Tool tool : tools) {
             tool.setIsActive(Account_Status.IN_ACTIVE);
         }
         toolsRepository.saveAll(tools);
-
-        // 4️⃣ Delete category
         toolCategoryRepository.delete(category);
-
-        // 5️⃣ Return success
         return new ApiResponseDto<>(true, "Tool category deleted successfully and all related tools set to inactive", null);
     }
 

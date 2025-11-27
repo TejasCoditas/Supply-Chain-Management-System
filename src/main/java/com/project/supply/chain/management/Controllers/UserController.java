@@ -2,6 +2,10 @@ package com.project.supply.chain.management.Controllers;
 
 import com.project.supply.chain.management.ServiceInterfaces.*;
 import com.project.supply.chain.management.dto.*;
+import com.project.supply.chain.management.entity.User;
+import com.project.supply.chain.management.util.ApplicationUtils;
+import jakarta.validation.Valid;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,22 +23,16 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
+@AllArgsConstructor
 public class UserController {
-    @Autowired
-    PlantHeadService plantHeadService;
-//    @Autowired
-//    ToolService toolService;
-    @Autowired
-    FactoryService factoryService;
-    @Autowired
-    CentralOfficeService centralOfficeService;
-    @Autowired
-    UserService userService;
-
-    @Autowired
-    MerchandiseService merchandiseService;
-    @Autowired
-    ToolCategoryService toolCategoryService;
+    private final PlantHeadService plantHeadService;
+    private final FactoryService factoryService;
+    private final CentralOfficeService centralOfficeService;
+    private final UserService userService;
+    private final MerchandiseService merchandiseService;
+    private final ToolCategoryService toolCategoryService;
+    private final ApplicationUtils appUtils;
+    private final CheifSupervisorService chiefSupervisorService;
 
 
 
@@ -42,10 +40,8 @@ public class UserController {
 
     @GetMapping("/get/profile")
     public ResponseEntity<ApiResponseDto<ProfileResponseDto>> getProfile() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String currentUserEmail = authentication.getName(); // email extracted from token
-
-        ApiResponseDto<ProfileResponseDto> response = userService.getProfile(currentUserEmail);
+        String email = appUtils.getLoggedInUserEmail();
+        ApiResponseDto<ProfileResponseDto> response = userService.getProfile(email);
         return ResponseEntity.ok(response);
     }
 
@@ -92,7 +88,7 @@ public class UserController {
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "name,asc") String[] sort
     ) {
-        // handle sort (e.g., sort=name,asc)
+
         Sort.Direction direction = Sort.Direction.fromString(sort[1]);
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sort[0]));
 
@@ -101,6 +97,8 @@ public class UserController {
     }
 
     //get api for owner
+
+
     @GetMapping("/get/all/employees")
     @PreAuthorize("hasAuthority('OWNER')")
     public ResponseEntity<ApiResponseDto<Page<UserListDto>>> getAllEmployees(
@@ -108,12 +106,17 @@ public class UserController {
             @RequestParam(required = false) String role,
             @RequestParam(required = false) Long factoryId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
-
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "username") String sortBy,
+            @RequestParam(defaultValue = "asc") String sortDir
     ) {
-        ApiResponseDto<Page<UserListDto>> response = userService.getAllEmployees(search, role, factoryId, page, size);
+        ApiResponseDto<Page<UserListDto>> response =
+                userService.getAllEmployees(search, role, factoryId, page, size, sortBy, sortDir);
+
         return ResponseEntity.ok(response);
     }
+
+
 
     @GetMapping("/get/central-office")
     @PreAuthorize("hasAuthority('OWNER')")
@@ -121,7 +124,7 @@ public class UserController {
         ApiResponseDto<List<CentralOfficeResponseDto>> response = centralOfficeService.getCentralOffice();
         return ResponseEntity.ok(response);
     }
-//remove factory id from request path varibale and then add api
+
     @PutMapping("/update/{factoryId}")
     @PreAuthorize("hasAuthority('OWNER')")
     public ResponseEntity<ApiResponseDto<Void>> updateFactory(
@@ -175,7 +178,7 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-    @PutMapping(value = "/update/merchandise/{id}", consumes = {"multipart/form-data"})
+    @PostMapping(value = "/update/merchandise/{id}", consumes = {"multipart/form-data"})
     @PreAuthorize("hasAnyAuthority('OWNER', 'CENTRAL_OFFICE')")
     public ResponseEntity<ApiResponseDto<MerchandiseResponseDto>> updateMerchandise(
             @PathVariable Long id,
@@ -198,7 +201,7 @@ public class UserController {
     @PreAuthorize("hasAnyAuthority('OWNER', 'CENTRAL_OFFICE')")
     public ResponseEntity<ApiResponseDto<MerchandiseResponseDto>> restockMerchandise(
             @PathVariable Long id,
-            @RequestParam Long additionalQuantity
+            @RequestParam Integer additionalQuantity
     ) {
         ApiResponseDto<MerchandiseResponseDto> response = merchandiseService.restockMerchandise(id, additionalQuantity);
         return ResponseEntity.ok(response);
@@ -220,7 +223,7 @@ public class UserController {
     }
 
     @PostMapping("/add/factory/employees")
-    public ResponseEntity<ApiResponseDto<UserResponseDto>> createEmployee(@RequestBody EmployeeRequestDto request) {
+    public ResponseEntity<ApiResponseDto<UserResponseDto>> createEmployee(@Valid @RequestBody EmployeeRequestDto request) {
         ApiResponseDto<UserResponseDto> response = plantHeadService.createEmployeeForCurrentPlantHead(request);
         return ResponseEntity.ok(response);
     }
@@ -242,7 +245,7 @@ public class UserController {
     }
     @PostMapping("/factory/update/inventory")
     @PreAuthorize("hasAuthority('PLANT_HEAD')")
-    public ResponseEntity<ApiResponseDto<Void>> updateFactoryStock(@RequestBody UpdateStockRequestDto request) {
+    public ResponseEntity<ApiResponseDto<Void>> updateFactoryStock(@Valid @RequestBody UpdateStockRequestDto request) {
         ApiResponseDto<Void> response = plantHeadService.updateFactoryProductStock(request);
         return ResponseEntity.ok(response);
     }
@@ -259,6 +262,7 @@ public class UserController {
         ApiResponseDto<List<FactoryProductStockResponseDto>> response = plantHeadService.getLowStockProducts();
         return ResponseEntity.ok(response);
     }
+
 /// get factory details controller for owner
 @GetMapping("/factory/details")
 @PreAuthorize("hasAnyAuthority('OWNER','PLANT_HEAD')")
@@ -270,32 +274,9 @@ public ResponseEntity<ApiResponseDto<FactoryDetailsDto>> getFactoryDetails(
 
 
 
-    ///Create Storage Areas
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
     //Tools Category
-
 
     @PostMapping("/tools/add/category")
     @PreAuthorize("hasAnyAuthority('OWNER', 'PLANT_HEAD')")
@@ -333,8 +314,7 @@ public ResponseEntity<ApiResponseDto<FactoryDetailsDto>> getFactoryDetails(
 
 
     //CHIEF-SUPERVISOR
-    @Autowired
-    private CheifSupervisorService chiefSupervisorService;
+
 
     @PostMapping("/add/worker")
     @PreAuthorize("hasAuthority('CHIEF_SUPERVISOR','OWNER')")

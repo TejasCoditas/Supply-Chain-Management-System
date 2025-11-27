@@ -1,6 +1,5 @@
 package com.project.supply.chain.management.dto;
-
-
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.project.supply.chain.management.constants.Role;
 import com.project.supply.chain.management.constants.Account_Status;
 import lombok.AllArgsConstructor;
@@ -10,6 +9,7 @@ import lombok.NoArgsConstructor;
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public class UserListDto {
         private Long id;
         private String username;
@@ -18,5 +18,9 @@ import lombok.NoArgsConstructor;
         private Account_Status isActive;
         private String img;
         private Long phone;
+        private Long factoryId;
+        private String factoryName;
+
+
     }
 

@@ -6,6 +6,9 @@ import com.project.supply.chain.management.dto.ApiResponseDto;
 import com.project.supply.chain.management.dto.ProductCategoryDto;
 import com.project.supply.chain.management.dto.ProductCategoryResponseDto;
 import com.project.supply.chain.management.entity.ProductCategory;
+import com.project.supply.chain.management.exceptions.ResourceAlreadyExistsException;
+import com.project.supply.chain.management.exceptions.ResourceNotFoundException;
+import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -13,22 +16,21 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
-
+@AllArgsConstructor
 public class ProductCategoryServiceImpl implements ProductCategoryService {
-@Autowired
-    private ProductCategoryRepository categoryRepository;
 
-    @Override
+    private final ProductCategoryRepository categoryRepository;
+
     public ApiResponseDto<Void> createProductCategory(ProductCategoryDto productCategoryDto) {
 
 
         if (productCategoryDto.getCategoryName() == null || productCategoryDto.getCategoryName().trim().isEmpty()) {
-            return new ApiResponseDto<>(false, "Category name cannot be empty", null);
+            throw  new IllegalArgumentException( "Category name cannot be empty");
         }
 
         boolean exists = categoryRepository.existsByCategoryNameIgnoreCase(productCategoryDto.getCategoryName());
         if (exists) {
-            return new ApiResponseDto<>(false, "Category with this name already exists", null);
+            throw  new ResourceAlreadyExistsException( "Category with this name already exists");
         }
 
         ProductCategory category = new ProductCategory();
@@ -41,11 +43,11 @@ public class ProductCategoryServiceImpl implements ProductCategoryService {
     @Override
     public ApiResponseDto<Void> updateProductCategory(Long categoryId, ProductCategoryDto dto) {
         ProductCategory existingCategory = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new RuntimeException("Category not found with ID: " + categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("Category not found with ID: " + categoryId));
 
         if (!existingCategory.getCategoryName().equalsIgnoreCase(dto.getCategoryName()) &&
                 categoryRepository.existsByCategoryNameIgnoreCase(dto.getCategoryName())) {
-            return new ApiResponseDto<>(false, "Another category with this name already exists", null);
+            throw  new ResourceAlreadyExistsException( "Another category with this name already exists");
         }
 
         existingCategory.setCategoryName(dto.getCategoryName());
@@ -56,15 +58,13 @@ public class ProductCategoryServiceImpl implements ProductCategoryService {
     }
     @Override
     public ApiResponseDto<List<ProductCategoryResponseDto>> getAllCategories(String sortBy, String sortDir) {
-        // ✅ Determine sort direction
-        Sort sort = sortDir.equalsIgnoreCase("desc") ?
-                Sort.by(sortBy).descending() :
-                Sort.by(sortBy).ascending();
+        // sort direction
+        Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
 
-        // ✅ Fetch categories from DB
+        //  Fetch categories
         List<ProductCategory> categories = categoryRepository.findAll(sort);
 
-        // ✅ Convert entities → DTOs (no nested products)
+
         List<ProductCategoryResponseDto> categoryDtos = categories.stream()
                 .map(category -> new ProductCategoryResponseDto(
                         category.getId(),
@@ -74,7 +74,7 @@ public class ProductCategoryServiceImpl implements ProductCategoryService {
                 ))
                 .toList();
 
-        // ✅ Return clean response
+        //  Return clean response
         return new ApiResponseDto<>(true, "Categories fetched successfully", categoryDtos);
     }
 
@@ -83,9 +83,8 @@ public class ProductCategoryServiceImpl implements ProductCategoryService {
     public ApiResponseDto<Void> deleteProductCategory(Long categoryId) {
         // Check if category exists
         if (!categoryRepository.existsById(categoryId)) {
-            return new ApiResponseDto<>(false, "Product category not found with ID: " + categoryId, null);
+            throw  new ResourceNotFoundException("Product category not found with ID: " + categoryId);
         }
-
 
         categoryRepository.deleteById(categoryId);
 

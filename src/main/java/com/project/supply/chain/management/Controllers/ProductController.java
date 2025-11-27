@@ -1,9 +1,11 @@
 package com.project.supply.chain.management.Controllers;
 
+import com.project.supply.chain.management.ServiceInterfaces.ProductRestockRequestService;
 import com.project.supply.chain.management.ServiceInterfaces.ProductService;
-import com.project.supply.chain.management.dto.AddProductDto;
-import com.project.supply.chain.management.dto.ApiResponseDto;
-import com.project.supply.chain.management.dto.ProductResponseDto;
+import com.project.supply.chain.management.constants.ToolOrProductRequestStatus;
+import com.project.supply.chain.management.dto.*;
+import jakarta.validation.Valid;
+import org.apache.tomcat.util.http.fileupload.FileUploadException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -11,19 +13,23 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+
 @RestController
 @RequestMapping("/api/products")
 public class ProductController
 {
     @Autowired
     private ProductService productService;
+    @Autowired
+    ProductRestockRequestService productRestockRequestService;
 
     @PostMapping(value = "/upload", consumes = {"multipart/form-data"})
     public ResponseEntity<ApiResponseDto<ProductResponseDto>> uploadProduct(
             @ModelAttribute AddProductDto productDto,
-            @RequestPart("image") MultipartFile imageFile) {
+            @RequestPart("image") MultipartFile imageFile) throws IOException {
 
-        ApiResponseDto<ProductResponseDto> response = productService.uploadProductWithImage(productDto, imageFile);
+        ApiResponseDto<ProductResponseDto> response = productService.uploadProduct(productDto, imageFile);
         return ResponseEntity.ok(response);
     }
 
@@ -52,6 +58,56 @@ public class ProductController
 
         ApiResponseDto<ProductResponseDto> response = productService.updateProduct(id, productDto, imageFile);
         return ResponseEntity.ok(response);
+    }
+
+    // Chief Officer creates restock request
+    @GetMapping("/central-office/get-inventory")
+    @PreAuthorize("hasAnyAuthority('OWNER', 'CENTRAL_OFFICE')")
+    public ApiResponseDto<Page<CentralOfficeInventoryDto>> getCentralOfficeInventory(
+            @RequestParam(required = false) Long productId,
+            @RequestParam(required = false) String productName,
+            @RequestParam(required = false) Long minQuantity,
+            @RequestParam(required = false) Long maxQuantity,
+            BaseRequestDto requestDto) {
+
+        return productRestockRequestService.getCentralOfficeInventory(
+                productId, productName, minQuantity, maxQuantity, requestDto);
+    }
+
+    @PreAuthorize("hasAuthority('CENTRAL_OFFICE')")
+    @PostMapping("/central-office/create/restock-request")
+    public ApiResponseDto<ProductRestockRequestDto> createRestockRequest(
+            @Valid @RequestBody CreateRestockRequestDto requestDto) {
+        return productRestockRequestService.createRestockRequest(requestDto);
+    }
+
+    @PreAuthorize("hasAuthority('PLANT_HEAD')")
+    @PutMapping("/factory/restock-requests/{requestId}/complete")
+    public ApiResponseDto<ProductRestockRequestDto> completeRestockRequest(
+            @PathVariable Long requestId) {
+        return productRestockRequestService.completeRestockRequest(requestId);
+    }
+
+    @PreAuthorize("hasAuthority('PLANT_HEAD')")
+    @PostMapping("/factories/stock/production")
+    public ApiResponseDto<String> updateStockDirectly(@Valid @RequestBody UpdateProductStockDto stockDto) {
+        return productRestockRequestService.updateStockDirectly(stockDto);
+    }
+
+    @PreAuthorize("hasAuthority('CENTRAL_OFFICE')")
+    @GetMapping("/central-office/get/restock-requests")
+    public ApiResponseDto<Page<ProductRestockRequestDto>> getMyRestockRequests(
+            @RequestParam(required = false) ToolOrProductRequestStatus status,
+            BaseRequestDto requestDto) {
+        return productRestockRequestService.getMyRestockRequests(status, requestDto);
+    }
+
+    @PreAuthorize("hasAnyAuthority('PLANT_HEAD', 'OWNER')")
+    @GetMapping("/factories/get/restock-requests")
+    public ApiResponseDto<Page<ProductRestockRequestDto>> getMyFactoryRestockRequests(
+            @RequestParam(required = false) ToolOrProductRequestStatus status,
+            BaseRequestDto requestDto) {
+        return productRestockRequestService.getMyFactoryRestockRequests(status, requestDto);
     }
 
 

@@ -13,14 +13,18 @@ public class FactoriesInventoryStock {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long stockEntryId;
 
-    @ManyToOne @JoinColumn(name = "factory_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "factory_id")
     private Factory factory;
 
-    @ManyToOne @JoinColumn(name = "product_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id")
     private Product product;
 
+    @Column
     private Integer qty;
 
-    @ManyToOne @JoinColumn(name = "added_by")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "added_by")
     private User addedBy;
 }

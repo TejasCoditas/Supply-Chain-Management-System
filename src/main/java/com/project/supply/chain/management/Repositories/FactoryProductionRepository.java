@@ -3,11 +3,13 @@ package com.project.supply.chain.management.Repositories;
 import com.project.supply.chain.management.dto.FactoryProductionSummaryDto;
 import com.project.supply.chain.management.entity.Factory;
 import com.project.supply.chain.management.entity.FactoryProduction;
+import com.project.supply.chain.management.entity.Product;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface FactoryProductionRepository extends JpaRepository<FactoryProduction,Long> {
     @Query("""
@@ -23,4 +25,5 @@ public interface FactoryProductionRepository extends JpaRepository<FactoryProduc
     List<FactoryProductionSummaryDto> getFactoryProductionSummary();
     List<FactoryProduction> findByFactory(Factory factory);
 
+    Optional<FactoryProduction> findByFactoryAndProduct(Factory factory, Product product);
 }
